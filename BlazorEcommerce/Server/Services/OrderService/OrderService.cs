@@ -68,8 +68,7 @@ namespace BlazorEcommerce.Server.Services.OrderService
                 .OrderByDescending(o => o.OrderDate)
                 .ToListAsync();
 
-            var orderResponse = new List<OrderOverviewResponse>();
-            orders.ForEach(o => orderResponse.Add(new OrderOverviewResponse
+            var orderResponse = orders.Select(o => new OrderOverviewResponse
             {
                 Id = o.Id,
                 OrderDate = o.OrderDate,
@@ -79,44 +78,71 @@ namespace BlazorEcommerce.Server.Services.OrderService
                     $" {o.OrderItems.Count - 1} more..." :
                     o.OrderItems.First().Product.Title,
                 ProductImageUrl = o.OrderItems.First().Product.ImageUrl
-            }));
+            }).ToList();
 
             response.Data = orderResponse;
-
             return response;
         }
 
         public async Task<ServiceResponse<bool>> PlaceOrder(int userId)
         {
-            var products = (await _cartService.GetDbCartProducts(userId)).Data;
-            decimal totalPrice = 0;
-            products.ForEach(product => totalPrice += product.Price * product.Quantity);
-
-            var orderItems = new List<OrderItem>();
-            products.ForEach(product => orderItems.Add(new OrderItem
+            try 
             {
-                ProductId = product.ProductId,
-                ProductTypeId = product.ProductTypeId,
-                Quantity = product.Quantity,
-                TotalPrice = product.Price * product.Quantity
-            }));
+                var products = (await _cartService.GetDbCartProducts(userId)).Data;
+        
+                if (products == null || products.Count == 0)
+                {
+                    return new ServiceResponse<bool> 
+                    { 
+                        Success = false, 
+                        Message = "No products in cart",
+                        Data = false 
+                    };
+                }
 
-            var order = new Order
+                decimal totalPrice = 0;
+                products.ForEach(product => totalPrice += product.Price * product.Quantity);
+
+                var orderItems = new List<OrderItem>();
+                products.ForEach(product => orderItems.Add(new OrderItem
+                {
+                    ProductId = product.ProductId,
+                    ProductTypeId = product.ProductTypeId,
+                    Quantity = product.Quantity,
+                    TotalPrice = product.Price * product.Quantity
+                }));
+
+                var order = new Order
+                {
+                    UserId = userId,
+                    OrderDate = DateTime.Now,
+                    TotalPrice = totalPrice,
+                    OrderItems = orderItems
+                };
+
+                _context.Orders.Add(order);
+
+                _context.CartItems.RemoveRange(_context.CartItems
+                    .Where(ci => ci.UserId == userId));
+
+                int savedChanges = await _context.SaveChangesAsync();
+        
+                Console.WriteLine($"Saved {savedChanges} changes to database");
+
+                return new ServiceResponse<bool> { Data = true, Success = true };
+            }
+            catch (Exception ex)
             {
-                UserId = userId,
-                OrderDate = DateTime.Now,
-                TotalPrice = totalPrice,
-                OrderItems = orderItems
-            };
+                Console.WriteLine($"Error placing order: {ex.Message}");
+                Console.WriteLine($"Full Exception: {ex}");
 
-            _context.Orders.Add(order);
-
-            _context.CartItems.RemoveRange(_context.CartItems
-                .Where(ci => ci.UserId == userId));
-
-            await _context.SaveChangesAsync();
-
-            return new ServiceResponse<bool> { Data = true };
+                return new ServiceResponse<bool> 
+                { 
+                    Data = false, 
+                    Success = false, 
+                    Message = "Error placing order: " + ex.Message 
+                };
+            }
         }
     }
 }

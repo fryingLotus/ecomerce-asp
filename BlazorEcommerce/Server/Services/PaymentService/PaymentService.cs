@@ -15,7 +15,8 @@ namespace BlazorEcommerce.Server.Services.PaymentService
             IAuthService authService,
             IOrderService orderService)
         {
-            StripeConfiguration.ApiKey = "sk_test_51HnFFuJWja1dketA1LY3VQds3XWpByD5GE8laKrxyNldWKnXXdktvITJiG3PYNDMwpSkrAv33d7JjvHDEUGPPo2E00vkDMlVIb";
+            StripeConfiguration.ApiKey =
+                "sk_test_51QPHvyJg0tsCaInFsRrUUbA0JYbJufwWbgFTj6WsznddeSNadaY6oXGHNMxuuIDbCAEd3q6uNtLlyBQW271wzBDb00UxqpsEsc";
 
             _cartService = cartService;
             _authService = authService;
@@ -64,30 +65,29 @@ namespace BlazorEcommerce.Server.Services.PaymentService
             return session;
         }
 
-        public async Task<ServiceResponse<bool>> FulfillOrder(HttpRequest request)
-        {
-            var json = await new StreamReader(request.Body).ReadToEndAsync();
-            try
-            {
-                var stripeEvent = EventUtility.ConstructEvent(
-                        json,
-                        request.Headers["Stripe-Signature"],
-                        secret
-                    );
-
-                if (stripeEvent.Type == Events.CheckoutSessionCompleted)
-                {
-                    var session = stripeEvent.Data.Object as Session;
-                    var user = await _authService.GetUserByEmail(session.CustomerEmail);
-                    await _orderService.PlaceOrder(user.Id);
-                }
-
-                return new ServiceResponse<bool> { Data = true };
-            }
-            catch (StripeException e)
-            {
-                return new ServiceResponse<bool> { Data = false, Success = false, Message = e.Message };
-            }
-        }
+      public async Task<ServiceResponse<bool>> FulfillOrder(HttpRequest request)
+      {
+          var json = await new StreamReader(request.Body).ReadToEndAsync();
+          try
+          {
+              var stripeEvent = EventUtility.ConstructEvent(
+                      json,
+                      request.Headers["Stripe-Signature"],
+                      secret
+                  );
+              
+              if (stripeEvent.Type == "checkout.session.completed")
+              {
+                  var session = stripeEvent.Data.Object as Session;
+                  var user = await _authService.GetUserByEmail(session.CustomerEmail);
+                  await _orderService.PlaceOrder(user.Id);
+              }
+              return new ServiceResponse<bool> { Data = true };
+          }
+          catch (StripeException e)
+          {
+              return new ServiceResponse<bool> { Data = false, Success = false, Message = e.Message };
+          }
+      }
     }
 }
